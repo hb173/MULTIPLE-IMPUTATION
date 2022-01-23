@@ -1,0 +1,161 @@
+---
+title: "Data Analysis Assignment 4"
+author: "Himangshu Raj Bhantana"
+date: "11/4/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+ treeage <- read.csv("~/treeage.txt")
+ nhanes <- read.csv("~/Downloads/nhanes.csv")
+```
+
+## Q1. MISSING DATA MECHANICS
+
+Here's our R command that was used to create a dataset with 30% of the age values missing completely at random, leaving all values of diameter observed.
+```{r }
+set.seed(6461)
+treeage$age[sample(1:nrow(treeage), 0.3*nrow(treeage))] = NA
+```
+
+This is the report of the dataset values after the ages are missing.Total missing observations is six, accounting for 30% of the age values missing completely at random.
+```{r comment='', echo=FALSE, results='asis'}
+ knitr::kable(treeage[1:20,], caption = "The dataset values after the ages are missing.", floating.environment="sidewaystable")
+```
+
+##  Scatter plot of age versus diameter
+After creating m = 50 imputed datasets. Multiple imputation diagnostics was implied to check the quality of the imputations of age, by looking at both the marginal distribution of age and the scatter plot of age versus diameter for two datasets d1, d2 and also with original dataset to compare.Because we intended to prevent negative values for the age variable, we utilized the "pmm" Predictive Mean Matching approach instead of other multiple approaches. The scatter plot can be seen below:
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(mice)
+library(grid)
+require(gridExtra)
+micey <- mice(treeage,m=50,
+                    defaultMethod=c("pmm","logreg","polyreg","polr"),
+                    print=F)
+##two datasets
+d1 <-  complete(micey, 1)
+d2 <- complete(micey,36)
+a<-ggplot(data =d1, aes(x=diameter, y=age)) + geom_point()
+b<-ggplot(data =d2, aes(x=diameter, y=age)) + geom_point()
+c<-ggplot(data =treeage, aes(x=diameter, y=age)) + geom_point()
+grid.arrange(grobs = list(a,b,c), ncol = 2, main = "Main title")
+```
+Looking at the two data sets imputed values follow the trend and pattern with original dataset so we can conclude that the quality of imputation is fine. 
+
+## Marginal distribution of age
+Density plot below is a representation of the distribution of a numeric variable for our two datasets and including with original dataset to compare.
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(mice)
+library(grid)
+require(gridExtra)
+h<-densityplot(d1$age)
+i<-densityplot(d2$age)
+
+m<-densityplot(treeage$age)
+grid.arrange(grobs = list(h,i,m), ncol = 2, main = "Main title")
+
+```
+Since the density plot of treeage looks very similar to d1 and d2, the quality of imputation looks well. 
+
+## Estimate a regression of age on diameter
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+library(xtable)
+full_imp <- with(data=micey, lm(age~diameter))
+final<- pool(full_imp)
+j<-summary(final)
+xtable(j, type='latex', title='Baseline Model Summary', header= FALSE, digits=2, no.space = TRUE)
+```
+
+Using the multiple imputation combining methods to get point and variance estimates for the regression parameters that account for missing data, we can conclude that a 1 cm increase in diameter translates to an increase of 12.3 years in tree age, assuming all other variables remain constant (on average).
+
+## Q2. MULTIPLE IMPUTATION IN NHANES DATA.
+
+In age, dmdeduc, indfminc, bmxwt, bmxbmi, bmxtri, bmxwaist, bmxthicr, and bmxarml, we had to modify from character to numeric and replace . values with NA. There are some variables, such as riagendr, that are factor variables with two levels. Other factor variables with more than two levels are also available.
+
+
+The imputed dataset appears to have the same bmi distribution. In comparison to the more normal distribution of the reported cases of bmxbmi in the original dataset, density charts for other datasets are substantially right skewed.
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+cols_ignored<-c('sdmvstra', 'sdmvpsu', 'wtmec2yr', 'ridageyr')
+nhanes <- nhanes[,!(names(nhanes)) %in% cols_ignored]
+
+
+nhanes[nhanes=='.'] <-NA
+
+library(dplyr)
+
+# solution
+nhanes <- nhanes %>% mutate_if(is.character,as.numeric)
+
+nhanes$riagendr<-factor(nhanes$riagendr)
+nhanes$ridreth2<-factor(nhanes$ridreth2)
+nhanes$dmdeduc<-factor(nhanes$dmdeduc)
+nhanes$indfminc<-factor(nhanes$indfminc)
+micey_imp <- mice(nhanes,m=10,
+              defaultMethod=c("pmm","logreg","polyreg","polr"),
+              print=F)
+
+
+
+## Two datasets
+d3 <-  complete(micey_imp, 3)
+d4 <- complete(micey_imp,4)
+
+densityplot(micey_imp)
+
+
+
+
+```
+
+Except for a few outliers, the distribution of the imputed values and the observed values appear to be comparable in the scatter plots and boxplots below for the variables 'bmxbmi' by 'age' and 'riagendr, bmxbmi as a function of age.
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+require(gridExtra)
+n<-ggplot(data =nhanes, aes(x=age, y=bmxbmi)) + geom_point()
+i<-ggplot(data =d3, aes(x=age, y=bmxbmi)) + geom_point()
+t<-ggplot(data =d4, aes(x=age, y=bmxbmi)) + geom_point()
+grid.arrange(grobs = list(n,i,t), ncol = 2, main = "Main title")
+
+```
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+boxplot(bmxbmi ~ riagendr,data=nhanes, xlab = "bmxbmi", ylab = "riagender")
+boxplot(bmxbmi ~ riagendr,data=d3, xlab = "bmxbmi", ylab = "riagender")
+boxplot(bmxbmi ~ riagendr,data=d4, xlab = "bmxbmi", ylab = "riagender")
+
+```
+#Model Assesment
+
+With our AIC model selection, we discovered that all age, riagendr, ridreth2, dmdeduc, and indfminc were significant, and that the interaction between age and dmdeduc was also significant. We also used log transformation on bmi, which resulted in a significant modification in our model. Looking at our final model's residual plots lm(formula = log(bmxbmi)age+riagendr+ridreth2+dmdeduc+age:dmdeduc) and the plots below, we can observe that the residual graphs have a little curvature in linearity. The pattern, on the other hand, is quite weak and may not be significant. This can be considered an instance in which linearity has been preserved. In the residual versus fitted plot, there is no spread out or converging trend using Interms of Independence and Equal Variance. When it comes to normalcy, the QQ-plot shows some bending, which contradicts the assumption of normalcy. There is no such infraction when viewed from the cooks distance.
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+
+null_model<-lm(log(bmxbmi)~1,data=d3)
+full_model<-lm(log(bmxbmi)~(age+riagendr+ridreth2+dmdeduc+indfminc+age:dmdeduc), data = d3)
+model2<-step(null_model,scope=formula(full_model),direction = "both", trace = 0)
+
+plot(full_model,which=1:5,col=c("blue4"))
+
+```
+
+## Model Interpretation
+
+We can conclude that using the combining rules (pool) to generate estimates that use all 10 completed datasets, running a model that predicts BMI from a subset of age, gender, race, education, and income, and applying the multiple imputation combining rules to obtain point and variance estimates for the regression parameters that account for missing data, we can conclude that our baseline is a Non Hispanic White male with an education level less than highschool, and annua is a Non Hispanic White male Gender is likewise significant at the 95 percent confidence level, according to the p value. Taking everything into account, females have a BMI that is 0.021 kg/m2 greater than males on average. In our model, we added the interaction between age and education, and the effect is considerable. We may read this as follows: for every year of age gained, someone with a high school diploma has a BMI of 0.004 kg/m2 lower than someone with a lesser degree of education. By comparing it to our baseline, we may also derive interpretations for various levels of the schooling variable.
+
+```{r, results= "asis", echo=FALSE, message=FALSE, warning=FALSE}
+library(xtable)
+full_impy <- with(data=micey_imp, lm(log(bmxbmi)~age+riagendr+ridreth2+dmdeduc+indfminc+age:dmdeduc))
+finaly<- pool(full_impy)
+aa<-summary(finaly)
+xtable(aa<-aa, type='latex', title='Baseline Model Summary', header= FALSE, digits=2, no.space = TRUE)
+```
+
